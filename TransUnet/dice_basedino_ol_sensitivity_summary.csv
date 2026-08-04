@@ -1,0 +1,4 @@
+Dice group,n patients,n cores,Mean Dice,Core PCa AUC,Core csPCa AUC
+Low Dice (≤0.61),7,82,0.495,80.2,93.2
+Mid Dice (0.61–0.76),7,96,0.706,74.8,73.9
+High Dice (>0.76),7,86,0.846,69.2,
