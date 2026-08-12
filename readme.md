@@ -191,8 +191,7 @@ ANT is compared against the following TTA methods, all applied to the same pretr
 
 ```bibtex
 @inproceedings{dzikunu2026ant,
-  title   = {Learning Prostate Anatomy at Test Time for Cancer
-                Detection in Micro-Ultrasound},
+  title   = {Learning Prostate Anatomy at Test Time for Cancer Detection in Micro-Ultrasound},
   author  = {Dzikunu, Obed K. and Abootorabi, Mahdi M. and Harmanani, Mohamed and Wilson, Paul F.R. and Willis, Emma and Luger F. and Kinnaird, Adam and Wodlinger, Brian and Mousavi, Parvin and Abolmaesumi, Purang},
   booktitle = {Machine Learning for Healthcare (MLHC)},
   year    = {2026},
