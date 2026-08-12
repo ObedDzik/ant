@@ -6,127 +6,165 @@ from torch.utils.data import Dataset
 from PIL import Image
 import numpy as np
 
+
 class NeedleTraceImageFramesDataset(Dataset):
     def __init__(
         self,
-        root_dir,
-        split=None,
-        split_id=None,
-        case_ids=None,
-        cine_ids=None,
+        samples_json: str,
+        split: str | None = None,
+        splits_json: str | None = None,
+        case_ids: list | None = None,
+        cine_ids: list | None = None,
         transform=None,
-        needle_mask_fname="needle_mask_full.png",
         out_fmt: Literal["pil", "np"] = "pil",
     ):
         """
-        PyTorch Dataset for loading needle annotation data.
-        Args:
-            root_dir (str): Path to the root directory containing exported data.
-            case_ids (list, optional): List of case IDs to include. Defaults to None.
-            cine_ids (list, optional): List of cine IDs to include. Defaults to None.
-        """
-        self.root_dir = root_dir
-        if split is not None:
-            splits_file = os.path.join(root_dir, "splits.json")
-            if not os.path.exists(splits_file):
-                raise FileNotFoundError(f"Splits file not found: {splits_file}")
-            with open(splits_file, "r") as f:
-                splits_data = json.load(f)
-            if split_id is None:
-                split_id = list(splits_data.keys())[0]
-            if split_id not in splits_data:
-                raise ValueError(f"Split ID '{split_id}' not found in splits file.")
-            if split not in splits_data[split_id]:
-                raise ValueError(f"Split '{split}' not found in split ID '{split_id}'.")
-            case_ids = splits_data[split_id][split]
+        PyTorch Dataset for loading needle annotation data from a samples.json file.
 
-        self.case_ids = case_ids
-        self.cine_ids = cine_ids
+        Args:
+            samples_json (str): Path to the samples.json file.
+            split (str, optional): Which split to use ('train', 'val', 'test').
+                                   Requires splits_json to be provided.
+            splits_json (str, optional): Path to splits.json mapping split names
+                                         to lists of case IDs.
+            case_ids (list, optional): Explicit list of case IDs to include.
+                                        Overrides split-based selection.
+            cine_ids (list, optional): List of cine IDs to include.
+            transform: Transform applied to each sample dict.
+            out_fmt (str): Output format — 'pil' or 'np'.
+        """
         self.transform = transform
         self.out_fmt = out_fmt
         self.data = []
-        # Traverse the directory structure to collect all cases and cine IDs
-        for case_dir in os.listdir(root_dir):
-            case_path = os.path.join(root_dir, case_dir)
-            if not os.path.isdir(case_path):
+
+        # Load samples
+        with open(samples_json, "r") as f:
+            samples = json.load(f)
+
+        # Resolve case_ids from split file if provided
+        if case_ids is None and split is not None:
+            if splits_json is None:
+                raise ValueError(
+                    "splits_json must be provided when using the split argument."
+                )
+            with open(splits_json, "r") as f:
+                splits_data = json.load(f)
+            split_id = list(splits_data.keys())[0]
+            if split not in splits_data[split_id]:
+                raise ValueError(
+                    f"Split '{split}' not found. "
+                    f"Available: {list(splits_data[split_id].keys())}"
+                )
+            case_ids = splits_data[split_id][split]
+
+        # Build flat list of cine samples
+        for case_id, case_data in samples.items():
+
+            if case_ids is not None and case_id not in case_ids:
                 continue
-            # Filter by case_ids if provided
-            if case_ids and case_dir not in case_ids:
-                continue
-            for cine_id_dir in os.listdir(case_path):
-                cine_path = os.path.join(case_path, cine_id_dir)
-                if not os.path.isdir(cine_path):
+
+            for cine in case_data.get("cines", []):
+                cine_id = cine["cine_id"]
+
+                if cine_ids is not None and cine_id not in cine_ids:
                     continue
-                # Filter by cine_ids if provided
-                if cine_ids and cine_id_dir not in cine_ids:
+
+                # Image path — use last path in list per README spec
+                image_paths = cine.get("image_path", [])
+                if not image_paths:
                     continue
-                if self.root_dir == '/datasets/exactvu_pca/OPTIMUM/UA_OL_PU_annotated_needles_multiframe':
-                    frames_path = os.path.join(cine_path, "frames")
-                    image_path = os.path.join(frames_path,'0000.png' )
-                else:
-                    image_path = os.path.join(cine_path, "image.png")
-                needle_mask_path = os.path.join(cine_path, needle_mask_fname)
-                info_path = os.path.join(cine_path, "info.json")
-                if (
-                    os.path.exists(image_path)
-                    and os.path.exists(needle_mask_path)
-                    and os.path.exists(info_path)
-                ):
-                    with open(info_path, "r") as f:
-                        info = json.load(f)
-                    self.data.append(
-                        {
-                            "image_path": image_path,
-                            "needle_mask_path": needle_mask_path,
-                            "info_path": info_path,
-                            "microsegnet_prostate_mask_path": os.path.join(
-                                cine_path, "micro_seg_net_prostate_mask.png"
-                            ),
-                            "info": info,
-                        }
-                    )
+                image_path = image_paths[-1]
+
+                if not os.path.exists(image_path):
+                    continue
+
+                needle_mask_path = cine.get("needle_mask_path", None)
+
+                # MicroSegNet mask stored alongside the image
+                microsegnet_mask_path = os.path.join(
+                    os.path.dirname(image_path),
+                    "micro_seg_net_prostate_mask.png"
+                )
+
+                # Build info dict matching what _ProstNFoundDatasetAdapterOptimum expects
+                info = {
+                    "case": case_id,
+                    "cine_id": cine_id,
+                    "center": case_data.get("center", ""),
+                    "age": case_data.get("age", np.nan),
+                    "psa": case_data.get("psa", np.nan),
+                    "GG": cine.get("GG", 0.0),
+                    "% Cancer": cine.get("% Cancer", np.nan),
+                    "PRI-MUS": cine.get("PRI-MUS", None),
+                    "Diagnosis": "Benign" if (cine.get("GG", 0) == 0) else "Cancer",
+                    "clinically_significant": bool(
+                        cine.get("GG", 0) is not None and
+                        not (isinstance(cine.get("GG", 0), float) and
+                             np.isnan(float(cine.get("GG", 0)))) and
+                        float(cine.get("GG", 0)) >= 2
+                    ),
+                    "all_cores_benign": float(cine.get("GG", 0) or 0) == 0,
+                    "Sample ID": cine_id,
+                }
+
+                self.data.append({
+                    "image_path": image_path,
+                    "needle_mask_path": needle_mask_path,
+                    "microsegnet_prostate_mask_path": microsegnet_mask_path,
+                    "info": info,
+                })
 
     def __len__(self):
-        """
-        Returns the number of samples in the dataset.
-        """
         return len(self.data)
 
     def __getitem__(self, idx):
-        """
-        Loads and returns a sample from the dataset.
-        Args:
-            idx (int): Index of the sample to retrieve.
-        Returns:
-            dict: A dictionary containing the image, needle mask, and metadata.
-        """
         sample = self.data[idx]
+
+        # Load image
         image = Image.open(sample["image_path"]).convert("RGB")
         if self.out_fmt == "np":
             image = np.array(image)
-        needle_mask = Image.open(sample["needle_mask_path"]).convert("L")
+
+        # Load needle mask
+        if sample["needle_mask_path"] and \
+           os.path.exists(sample["needle_mask_path"]):
+            needle_mask = Image.open(sample["needle_mask_path"]).convert("L")
+        else:
+            w, h = image.size if hasattr(image, "size") else (image.shape[1], image.shape[0])
+            needle_mask = Image.fromarray(np.zeros((h, w), dtype=np.uint8))
         if self.out_fmt == "np":
             needle_mask = np.array(needle_mask)
-        info = sample["info"]
-        out = {"image": image, "needle_mask": needle_mask, "path": sample["image_path"], "info": info,}
+
+        out = {
+            "image": image,
+            "needle_mask": needle_mask,
+            "path": sample["image_path"],
+            "info": sample["info"],
+        }
+
+        # Load MicroSegNet prostate mask if available
         if os.path.exists(sample["microsegnet_prostate_mask_path"]):
-            microsegnet_prostate_mask = Image.open(sample["microsegnet_prostate_mask_path"]).convert("L")
+            prostate_mask = Image.open(
+                sample["microsegnet_prostate_mask_path"]
+            ).convert("L")
             if self.out_fmt == "np":
-                microsegnet_prostate_mask = np.array(microsegnet_prostate_mask)
-            out["prostate_mask"] = microsegnet_prostate_mask
+                prostate_mask = np.array(prostate_mask)
+            out["prostate_mask"] = prostate_mask
+
         if self.transform:
             out = self.transform(out)
+
         return out
 
     def list_indices_by_patient_ids(self):
-        # get all patient ids:
+        """Returns dict mapping case_id to sorted list of dataset indices."""
         outputs = {}
         for index, sample in enumerate(self.data):
-            info = sample["info"]
-            case_id = info["case"]
-            core_id = info["cine_id"]
-            outputs.setdefault(case_id, []).append((index, core_id))
+            case_id = sample["info"]["case"]
+            cine_id = sample["info"]["cine_id"]
+            outputs.setdefault(case_id, []).append((index, cine_id))
         for case_id, index_info in outputs.items():
-            indices_sorted = [index_info_i[0] for index_info_i in sorted(index_info, key=lambda item: item[1])]
-            outputs[case_id] = indices_sorted
+            outputs[case_id] = [
+                i for i, _ in sorted(index_info, key=lambda x: x[1])
+            ]
         return outputs

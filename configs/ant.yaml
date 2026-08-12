@@ -1,0 +1,124 @@
+optimum_center: OL
+base_output_dir: logs/ant/test_adapt
+name: ant_adapt
+chkpt_dir: /${oc.env:CHECKPOINT}/ANT/${oc.env:JOB_ID}/${name}
+
+output_dir: logs/statistics_proside_ttt/train_nct_test_optimum/${name}_${optimum_center}
+
+recon: False
+use_ttt: False
+update_norm: False
+update_bias: False
+inner_steps: 10
+update_layers: 'first_n'
+
+reorder_val_data: False
+reorder_val_seed:  70
+
+persist_encoder: false
+persist_head: true
+stateful_head: true
+stateful_encoder_optim: true
+
+
+flip_ud: False
+ttt_calibration_passes: 0
+perturb: False
+inner_lr: 1e-4
+seghead: 'normal'
+n_blocks: 6
+encoder_dim: 1024
+
+data:
+  root_dir: null #Path to samples.json file
+  fold: null
+  n_folds: 5
+  optimum_center: ${optimum_center}
+  test_center: null
+  exclude_benign_cores_from_positive_patients: true
+  involvement_threshold_pct: null
+  undersample_benign_ratio: null
+  cohort_selection_mode: train_only
+  dataset: default
+  batch_size: 4
+  num_workers: 8
+  train_subsample_seed: 42
+  augmentations: translate,random_crop
+  image_size: 512
+  first_downsample_size: null
+  mask_size: 128
+  limit_train_data: null
+  mean: [0, 0, 0]
+  std: [1, 1, 1]
+  flip_ud: ${flip_ud}
+  frames: first
+  crop_to_prostate: false
+  rf_as_bmode: false
+  include_rf: false
+  reorder_val: ${reorder_val_data}
+  reorder_seed: ${reorder_val_seed}
+
+model_kw:
+  dino_embedding_dim: 1024
+  use_class_decoder: true
+  floating_point_prompts: []
+  aux_decoder_dim: 512
+  
+model:
+  name: unetr_generic
+  backbone_cfg:
+    name: dinov3_backbone_wrapper_for_feature_maps_list
+    backbone_cfg:
+      name: dinov3_vitl16 
+      pretrained: true
+  embedding_size: 1024
+  backbone_out_format: bchw
+  input_size: 512
+  output_size: 512
+  interaction_indices:
+  - 4
+  - 11
+  - 17
+  - 23
+loss: mil_prop_bce_entropy_reg
+pos_weight: 8.0
+treat_gg1_as_benign: false
+outside_prostate_penalty: false
+add_image_clf: true
+image_clf_mode: cspca
+add_image_clf_high_vs_low_grade: false
+optimizer: adamw
+lr: 1.0e-05
+encoder_lr: 1.0e-05
+warmup_lr: 0.0001
+cnn_lr: 1.0e-05
+warmup_epochs: 0
+wd: 0.01
+epochs: 1
+accumulate_grad_steps: 1
+cutoff_epoch: null
+run_test: false
+test_every_epoch: false
+run_val: true
+project_name: ANT
+seed: 30
+tracked_metric: test/auc
+save_checkpoint_wandb: false
+torch_compile: true
+use_amp: false
+device: cuda
+checkpoint_dir: ${chkpt_dir} #where to save weights
+model_checkpoint: null #path to pretrained cancer detection encoder weights
+sigma_checkpoint: null
+debug: false
+save_best_weights: True
+evaluator:
+  log_images: true
+  log_images_every: 100
+wandb:
+  name: ${name}-${optimum_center}
+  project: ${project_name}
+  group: ${name}
+job_id: 0
+
+

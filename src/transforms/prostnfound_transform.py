@@ -225,7 +225,6 @@ class _ProstNFoundDatasetAdapterOptimum:
         bmode = item["image"]
         bmode = np.array(bmode)[..., 0]
         needle_mask = np.array(item["needle_mask"])
-        # prostate_mask = np.ones_like(needle_mask)
         try:
             prostate_mask = np.array(item['prostate_mask'])
         except:
@@ -234,17 +233,9 @@ class _ProstNFoundDatasetAdapterOptimum:
         if self.image_orientation == "probe_top":
             bmode = np.flipud(bmode)  # Flip the image vertically
             needle_mask = np.flipud(needle_mask)  # Flip the mask vertically
-            # if prostate_mask:
             prostate_mask = np.flipud(prostate_mask)  # Flip the mask vertically
 
         info = item["info"]
-
-        # {'cine_id': 'UA-023-006',
-        # 'center': 'UA',
-        # 'case': 'UA-023',
-        # 'isBiopsy': True,
-        # 'isFusionVu': True,
-        # 'hasFusionVuOverlay': True, 'bimg_path': '/Users/pwilson/Library/CloudStorage/Box-Box/OPTIMUM Blinded Database/UA/UA-023/UA-023/20220502075606670/20220502075606702/20220502081332512/336714191398189585739976459255897944.bimg', 'cine_number': 6.0, 'length': 60.0, 'heightMm': 28.0, 'heightPixel': 962.0, 'widthMm': 46.08, 'widthPixel': 1372.0, 'createdDate': '2022-05-02T14:39:35.0Z', 'Sample ID': 'RLM', 'Cine #': '6', 'PRI-MUS': '2', 'PI-RADS': 2.0, 'Notes': nan, 'Number of Samples': 1.0, 'Core Length': '14', 'Diagnosis': 'Benign', 'GG': nan, '% Cancer': nan, '% P4': nan, 'P Inv': False, 'IDC': False, 'Cribiform': False, 'Inflamm': False, 'HGPIN': False, 'Atypia': False, 'PATH Notes': nan, 'PATH ID': 'RLM', 'case_path': 'UA-023', 'age': 53.0, 'psa': 5.0, 'study_arm': 'Arm3-MicroUS-MRI'}
 
         return {
             "bmode": bmode,
